@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Portal Absensi & Jurnal Guru</title>
+  <title>Portal Absensi Guru</title>
   
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & React DOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -22,172 +27,224 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyET9b9QYG7HR5uFpRdFvMkihhp-ee3YB4ce7J9eUPI13Be1GG8mHPG6kaQ0UTJIiiwvQ/exec";
+    // Masukkan URL Web App Google Apps Script kamu di sini
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwDMZWc2p6K7JJWv8pVU0FdyKouVhoYb2DQaOcF8krbSg2MjTrGM1ELapI9JwfkZu2OSw/exec";
 
-    const SHEET_PRESENSI = "Presensi_dan_KBM";
-    const SHEET_GURU = "Data_Guru";
+    // 1. Definisi Komponen App
+    function App() {
+      const [user, setUser] = React.useState(null);
+      const [nip, setNip] = React.useState("");
+      const [password, setPassword] = React.useState("");
+      const [loading, setLoading] = React.useState(false);
+      const [message, setMessage] = React.useState("");
 
-function setupSheets() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const [status, setStatus] = React.useState("Hadir");
+      const [classId, setClassId] = React.useState("");
+      const [lessonHour, setLessonHour] = React.useState("");
+      const [jumlahHadir, setJumlahHadir] = React.useState("");
+      const [materiOrAlasan, setMateriOrAlasan] = React.useState("");
 
-  // 1. Buat / Dapatkan Sheet Presensi dan KBM
-  let sheetPresensi = ss.getSheetByName(SHEET_PRESENSI);
-  if (!sheetPresensi) {
-    sheetPresensi = ss.insertSheet(SHEET_PRESENSI);
-    sheetPresensi.appendRow([
-      "ID Record",
-      "Waktu Catat",
-      "Nama Guru",
-      "Status Kehadiran",
-      "Mata Pelajaran",
-      "Kelas",
-      "Jam Pelajaran",
-      "Jumlah Hadir",
-      "Materi / Alasan",
-      "Foto Dokumentasi"
-    ]);
-    sheetPresensi.getRange("A1:J1").setFontWeight("bold").setBackground("#d1fae5");
-  }
-
-  // 2. Buat / Dapatkan Sheet Data Guru
-  let sheetGuru = ss.getSheetByName(SHEET_GURU);
-  if (!sheetGuru) {
-    sheetGuru = ss.insertSheet(SHEET_GURU);
-    sheetGuru.appendRow([
-      "ID Guru",
-      "NIP",
-      "Nama Guru",
-      "Mata Pelajaran Utama",
-      "Password"
-    ]);
-    sheetGuru.getRange("A1:E1").setFontWeight("bold").setBackground("#d1fae5");
-
-    // Data Sampel Guru
-    sheetGuru.appendRow(["G001", "198503152010011002", "Drs. Ahmad Dahlan, M.Pd.", "Matematika", "123456"]);
-    sheetGuru.appendRow(["G002", "198807222012022005", "Siti Nurhaliza, S.Pd.", "Bahasa Indonesia", "123456"]);
-  }
-
-  Logger.log("Berhasil menyiapkan tabel Google Sheets!");
-}
-
-function createJsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doGet(e) {
-  try {
-    const action = e ? e.parameter.action : null;
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    // Route 1: Mengambil Semua Data Presensi & Jurnal KBM
-    if (action === "getRecords" || action === "getJournals") {
-      const sheet = ss.getSheetByName(SHEET_PRESENSI);
-      if (!sheet) return createJsonResponse({ status: "success", data: [] });
-
-      const rows = sheet.getDataRange().getValues();
-      rows.shift(); // Hapus header row
-
-      const records = rows.map(r => ({
-        id: r[0],
-        createdAt: r[1],
-        teacherName: r[2],
-        status: r[3],
-        subject: r[4],
-        classId: r[5],
-        lessonHour: r[6],
-        jumlahHadir: r[7],
-        materi: r[3] === 'Hadir' ? r[8] : '-',
-        alasan: r[3] !== 'Hadir' ? r[8] : '-',
-        photoUrl: r[9] || null
-      }));
-
-      return createJsonResponse({ status: "success", data: records.reverse() });
-    }
-
-    // Route 2: Validasi Login Guru
-    if (action === "login") {
-      const nip = e.parameter.nip;
-      const pass = e.parameter.password;
-
-      const sheet = ss.getSheetByName(SHEET_GURU);
-      if (!sheet) return createJsonResponse({ status: "error", message: "Data guru belum diinisialisasi" });
-
-      const rows = sheet.getDataRange().getValues();
-      rows.shift();
-
-      const found = rows.find(r => String(r[1]).trim() === String(nip).trim() && String(r[4]).trim() === String(pass).trim());
-
-      if (found) {
-        return createJsonResponse({
-          status: "success",
-          user: {
-            id: found[0],
-            nip: found[1],
-            name: found[2],
-            subject: found[3],
-            avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200'
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setMessage("");
+        try {
+          const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=login&nip=${nip}&password=${password}`);
+          const data = await res.json();
+          if (data.status === "success") {
+            setUser(data.user);
+          } else {
+            setMessage(data.message || "NIP atau password salah.");
           }
-        });
-      } else {
-        return createJsonResponse({ status: "error", message: "NIP atau Kata Sandi salah" });
+        } catch (err) {
+          setMessage("Terjadi kesalahan koneksi ke server.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleSubmitPresensi = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setMessage("");
+
+        const payload = {
+          action: "addRecord",
+          teacherName: user.name,
+          subject: user.subject,
+          status: status,
+          classId: classId,
+          lessonHour: lessonHour,
+          jumlahHadir: jumlahHadir,
+          materi: status === "Hadir" ? materiOrAlasan : "",
+          alasan: status !== "Hadir" ? materiOrAlasan : ""
+        };
+
+        try {
+          const res = await fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (data.status === "success") {
+            setMessage("Presensi berhasil dikirim!");
+            setClassId("");
+            setLessonHour("");
+            setJumlahHadir("");
+            setMateriOrAlasan("");
+          } else {
+            setMessage("Gagal mengirim data.");
+          }
+        } catch (err) {
+          setMessage("Terjadi kesalahan saat menyimpan.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      if (!user) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-xl shadow-md w-full max-w-md animate-fade-in">
+              <h2 className="text-2xl font-bold text-center mb-6 text-slate-800">Login Portal Guru</h2>
+              {message && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{message}</div>}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">NIP</label>
+                  <input 
+                    type="text" 
+                    value={nip} 
+                    onChange={(e) => setNip(e.target.value)} 
+                    className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none" 
+                    placeholder="Masukkan NIP" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Password</label>
+                  <input 
+                    type="password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none" 
+                    placeholder="Masukkan Password" 
+                    required 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full bg-emerald-600 text-white font-medium py-2.5 rounded-lg hover:bg-emerald-700 transition"
+                >
+                  {loading ? "Memproses..." : "Masuk"}
+                </button>
+              </form>
+            </div>
+          </div>
+        );
       }
+
+      return (
+        <div className="min-h-screen p-4 max-w-2xl mx-auto">
+          <div className="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">{user.name}</h1>
+              <p className="text-sm text-slate-500">Mapel: {user.subject} | NIP: {user.nip}</p>
+            </div>
+            <button 
+              onClick={() => setUser(null)} 
+              className="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50"
+            >
+              Keluar
+            </button>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-md animate-fade-in">
+            <h2 className="text-lg font-bold mb-4">Form Input Presensi & KBM</h2>
+            {message && <div className="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 text-sm">{message}</div>}
+
+            <form onSubmit={handleSubmitPresensi} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Status Kehadiran</label>
+                <select 
+                  value={status} 
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="Hadir">Hadir Mengajar</option>
+                  <option value="Izin">Izin</option>
+                  <option value="Sakit">Sakit</option>
+                </select>
+              </div>
+
+              {status === "Hadir" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Kelas</label>
+                      <input 
+                        type="text" 
+                        value={classId} 
+                        onChange={(e) => setClassId(e.target.value)} 
+                        placeholder="Contoh: X IPA 1" 
+                        className="w-full border rounded-lg p-2.5" 
+                        required 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Jam Ke-</label>
+                      <input 
+                        type="text" 
+                        value={lessonHour} 
+                        onChange={(e) => setLessonHour(e.target.value)} 
+                        placeholder="Contoh: 1-2" 
+                        className="w-full border rounded-lg p-2.5" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Jumlah Siswa Hadir</label>
+                    <input 
+                      type="number" 
+                      value={jumlahHadir} 
+                      onChange={(e) => setJumlahHadir(e.target.value)} 
+                      placeholder="Contoh: 32" 
+                      className="w-full border rounded-lg p-2.5" 
+                      required 
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  {status === "Hadir" ? "Materi Pembelajaran" : "Alasan / Keterangan"}
+                </label>
+                <textarea 
+                  value={materiOrAlasan} 
+                  onChange={(e) => setMateriOrAlasan(e.target.value)} 
+                  rows="3" 
+                  className="w-full border rounded-lg p-2.5" 
+                  placeholder={status === "Hadir" ? "Tuliskan materi KBM hari ini..." : "Tuliskan alasan..."} 
+                  required 
+                ></textarea>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading} 
+                className="w-full bg-emerald-600 text-white font-medium py-2.5 rounded-lg hover:bg-emerald-700 transition"
+              >
+                {loading ? "Menyimpan..." : "Kirim Presensi"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
     }
 
-    return createJsonResponse({ status: "error", message: "Aksi GET tidak dikenal" });
-
-  } catch (error) {
-    return createJsonResponse({ status: "error", message: error.toString() });
-  }
-}
-
-function doPost(e) {
-  try {
-    const contents = JSON.parse(e.postData.contents);
-    const action = contents.action;
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    // Route: Menyimpan Presensi / Jurnal KBM / Izin / Sakit
-    if (action === "addRecord" || action === "addJournal") {
-      let sheet = ss.getSheetByName(SHEET_PRESENSI);
-      if (!sheet) {
-        setupSheets();
-        sheet = ss.getSheetByName(SHEET_PRESENSI);
-      }
-
-      const newId = `REC-${Date.now()}`;
-      const timestamp = new Date().toLocaleString("id-ID");
-
-      const status = contents.status || "Hadir";
-      const detailMateriAlasan = status === "Hadir" ? (contents.materi || "-") : (contents.alasan || "-");
-
-      sheet.appendRow([
-        newId,
-        timestamp,
-        contents.teacherName || "-",
-        status,
-        contents.subject || "-",
-        status === "Hadir" ? (contents.classId || "-") : "-",
-        status === "Hadir" ? (contents.lessonHour || "-") : "-",
-        status === "Hadir" ? (contents.jumlahHadir || "0") : "0",
-        detailMateriAlasan,
-        status === "Hadir" ? (contents.photoUrl || "-") : "-"
-      ]);
-
-      return createJsonResponse({
-        status: "success",
-        message: `Presensi (${status}) berhasil dicatat di Google Sheets`,
-        id: newId
-      });
-    }
-
-    return createJsonResponse({ status: "error", message: "Aksi POST tidak valid" });
-
-  } catch (error) {
-    return createJsonResponse({ status: "error", message: error.toString() });
-  }
-}
-
+    // 2. Render React setelah App didefinisikan
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
